@@ -5,7 +5,7 @@
   <title>Captura Forense V2</title>
   <style>
     body { font-family: Arial; padding: 16px; text-align:center; background:#f5f5f5; }
-    video { width:100%; border-radius:16px; background:#000; }
+    video { width:100%; border-radius:16px; background:#000; min-height:240px; }
     .btn { width:100%; padding:16px; margin-top:12px; border:none; border-radius:12px; font-size:18px; }
     .foto { background:#dbeafe; }
     .video { background:#d1fae5; }
@@ -19,27 +19,30 @@
   <canvas id="canvas" style="display:none"></canvas>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKdbsCZuUyyMzVjLbYSpJXdwjqKJA14bXf1PyDq3nBYVNl2a9mAiaDHFR7l04Tg3JIfg/exec
-";
+const SCRIPT_URL = "COLE_AQUI_URL_DO_APPS_SCRIPT";
 const video = document.getElementById("video");
 let currentStream = null;
 
-async function startCamera(facing = "environment", withAudio = false) {
-  if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+async function initCamera(facing = "environment", audio = false) {
+  try {
+    if (currentStream) {
+      currentStream.getTracks().forEach(track => track.stop());
+    }
 
-  currentStream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: facing } },
-    audio: withAudio
-  });
+    currentStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facing },
+      audio
+    });
 
-  video.srcObject = currentStream;
+    video.srcObject = currentStream;
+    await video.play();
 
-  await new Promise((resolve) => {
-    video.onloadedmetadata = () => {
-      video.play();
-      setTimeout(resolve, 800);
-    };
-  });
+    // pequena estabilização igual à V1 que funcionou
+    await new Promise(r => setTimeout(r, 1000));
+  } catch (err) {
+    alert("❌ Erro ao abrir câmera: " + err.message);
+    throw err;
+  }
 }
 
 function getLocation() {
@@ -52,89 +55,84 @@ function getLocation() {
   });
 }
 
-function stampAndCapture(label, gps) {
+function captureFrame(label, gps) {
   const canvas = document.getElementById("canvas");
-  canvas.width = video.videoWidth || 1280;
-  canvas.height = video.videoHeight || 720;
+  const width = video.videoWidth || 1280;
+  const height = video.videoHeight || 720;
+  canvas.width = width;
+  canvas.height = height;
 
   const ctx = canvas.getContext("2d");
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(video, 0, 0, width, height);
 
   const stamp = `${label} | ${new Date().toLocaleString()} | ${gps.lat},${gps.lng}`;
-  ctx.fillStyle = "rgba(0,0,0,0.65)";
-  ctx.fillRect(0, canvas.height - 46, canvas.width, 46);
+  ctx.fillStyle = "rgba(0,0,0,0.7)";
+  ctx.fillRect(0, height - 50, width, 50);
   ctx.fillStyle = "white";
   ctx.font = "20px Arial";
-  ctx.fillText(stamp, 12, canvas.height - 16);
+  ctx.fillText(stamp, 10, height - 18);
 
   return canvas.toDataURL("image/jpeg", 0.9);
 }
 
 async function sendPayload(payload) {
-  const res = await fetch(SCRIPT_URL, {
+  const response = await fetch(SCRIPT_URL, {
     method: "POST",
     redirect: "follow",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
     body: JSON.stringify(payload)
   });
-  return res.text();
+  return response.text();
 }
 
 async function captureDualPhotos() {
-  try {
-    const gps = await getLocation();
+  const gps = await getLocation();
 
-    await startCamera("environment", false);
-    const rear = stampAndCapture("camera_traseira", gps);
-    const r1 = await sendPayload({ type: "photo_single", gps, label: "camera_traseira", image: rear });
+  await initCamera("environment", false);
+  const rear = captureFrame("camera_traseira", gps);
+  await sendPayload({ type: "photo_single", gps, label: "camera_traseira", image: rear });
 
-    await startCamera("user", false);
-    const front = stampAndCapture("camera_frontal", gps);
-    const r2 = await sendPayload({ type: "photo_single", gps, label: "camera_frontal", image: front });
+  await initCamera("user", false);
+  const front = captureFrame("camera_frontal", gps);
+  await sendPayload({ type: "photo_single", gps, label: "camera_frontal", image: front });
 
-    alert("✅ Fotos enviadas: " + r1 + " | " + r2);
-  } catch (e) {
-    alert("❌ Erro foto: " + e.message);
-  }
+  // volta para traseira no final
+  await initCamera("environment", false);
+  alert("✅ Fotos frontal e traseira enviadas");
 }
 
 async function recordTenSeconds() {
-  try {
-    const gps = await getLocation();
-    await startCamera("environment", true);
+  const gps = await getLocation();
+  await initCamera("environment", true);
 
-    const chunks = [];
-    const recorder = new MediaRecorder(currentStream, {
-      mimeType: "video/webm;codecs=vp8",
-      videoBitsPerSecond: 500000
-    });
+  const chunks = [];
+  const recorder = new MediaRecorder(currentStream);
 
-    recorder.ondataavailable = e => {
-      if (e.data.size > 0) chunks.push(e.data);
+  recorder.ondataavailable = e => {
+    if (e.data.size > 0) chunks.push(e.data);
+  };
+
+  recorder.onstop = async () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      await sendPayload({ type: "video", gps, video: reader.result });
+      await initCamera("environment", false);
+      alert("✅ Vídeo enviado");
     };
+    reader.readAsDataURL(blob);
+  };
 
-    recorder.onstop = async () => {
-      const blob = new Blob(chunks, { type: "video/webm" });
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const result = await sendPayload({
-          type: "video",
-          gps,
-          video: reader.result
-        });
-        alert("✅ Vídeo enviado: " + result);
-      };
-      reader.readAsDataURL(blob);
-    };
-
-    recorder.start();
-    setTimeout(() => recorder.stop(), 10000);
-  } catch (e) {
-    alert("❌ Erro vídeo: " + e.message);
-  }
+  recorder.start();
+  setTimeout(() => recorder.stop(), 10000);
 }
 
-startCamera();
+// inicialização simples e confiável
+window.onload = () => {
+  initCamera("environment", false);
+};
 </script>
 </body>
 </html>
