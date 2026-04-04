@@ -19,20 +19,27 @@
   <canvas id="canvas" style="display:none"></canvas>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKdbsCZuUyyMzVjLbYSpJXdwjqKJA14bXf1PyDq3nBYVNl2a9mAiaDHFR7l04Tg3JIfg/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKdbsCZuUyyMzVjLbYSpJXdwjqKJA14bXf1PyDq3nBYVNl2a9mAiaDHFR7l04Tg3JIfg/exec
+";
 const video = document.getElementById("video");
-let currentStream;
+let currentStream = null;
 
-async function startCamera(facing="environment") {
-  if (currentStream) {
-    currentStream.getTracks().forEach(t => t.stop());
-  }
+async function startCamera(facing = "environment", withAudio = false) {
+  if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+
   currentStream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: facing },
-    audio: true
+    video: { facingMode: { ideal: facing } },
+    audio: withAudio
   });
+
   video.srcObject = currentStream;
-  await new Promise(r => setTimeout(r, 1200));
+
+  await new Promise((resolve) => {
+    video.onloadedmetadata = () => {
+      video.play();
+      setTimeout(resolve, 800);
+    };
+  });
 }
 
 function getLocation() {
@@ -47,17 +54,18 @@ function getLocation() {
 
 function stampAndCapture(label, gps) {
   const canvas = document.getElementById("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 720;
+
   const ctx = canvas.getContext("2d");
-  ctx.drawImage(video, 0, 0);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
   const stamp = `${label} | ${new Date().toLocaleString()} | ${gps.lat},${gps.lng}`;
   ctx.fillStyle = "rgba(0,0,0,0.65)";
-  ctx.fillRect(0, canvas.height - 42, canvas.width, 42);
+  ctx.fillRect(0, canvas.height - 46, canvas.width, 46);
   ctx.fillStyle = "white";
   ctx.font = "20px Arial";
-  ctx.fillText(stamp, 12, canvas.height - 14);
+  ctx.fillText(stamp, 12, canvas.height - 16);
 
   return canvas.toDataURL("image/jpeg", 0.9);
 }
@@ -73,55 +81,57 @@ async function sendPayload(payload) {
 }
 
 async function captureDualPhotos() {
-  const gps = await getLocation();
+  try {
+    const gps = await getLocation();
 
-  await startCamera("environment");
-  const rear = stampAndCapture("camera_traseira", gps);
+    await startCamera("environment", false);
+    const rear = stampAndCapture("camera_traseira", gps);
+    const r1 = await sendPayload({ type: "photo_single", gps, label: "camera_traseira", image: rear });
 
-  await startCamera("user");
-  const front = stampAndCapture("camera_frontal", gps);
+    await startCamera("user", false);
+    const front = stampAndCapture("camera_frontal", gps);
+    const r2 = await sendPayload({ type: "photo_single", gps, label: "camera_frontal", image: front });
 
-  await sendPayload({
-    type: "dual_photo",
-    gps,
-    rear,
-    front
-  });
-
-  alert("✅ Fotos frontal e traseira enviadas");
+    alert("✅ Fotos enviadas: " + r1 + " | " + r2);
+  } catch (e) {
+    alert("❌ Erro foto: " + e.message);
+  }
 }
 
 async function recordTenSeconds() {
-  const gps = await getLocation();
-  await startCamera("environment");
+  try {
+    const gps = await getLocation();
+    await startCamera("environment", true);
 
-  const recorder = new MediaRecorder(currentStream, {
-    mimeType: "video/webm"
-  });
+    const chunks = [];
+    const recorder = new MediaRecorder(currentStream, {
+      mimeType: "video/webm;codecs=vp8",
+      videoBitsPerSecond: 500000
+    });
 
-  const chunks = [];
-  recorder.ondataavailable = e => chunks.push(e.data);
-
-  recorder.start();
-  alert("🎥 Gravando 10 segundos...");
-
-  setTimeout(async () => {
-    recorder.stop();
-  }, 10000);
-
-  recorder.onstop = async () => {
-    const blob = new Blob(chunks, { type: "video/webm" });
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      await sendPayload({
-        type: "video",
-        gps,
-        video: reader.result
-      });
-      alert("✅ Vídeo enviado");
+    recorder.ondataavailable = e => {
+      if (e.data.size > 0) chunks.push(e.data);
     };
-    reader.readAsDataURL(blob);
-  };
+
+    recorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: "video/webm" });
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const result = await sendPayload({
+          type: "video",
+          gps,
+          video: reader.result
+        });
+        alert("✅ Vídeo enviado: " + result);
+      };
+      reader.readAsDataURL(blob);
+    };
+
+    recorder.start();
+    setTimeout(() => recorder.stop(), 10000);
+  } catch (e) {
+    alert("❌ Erro vídeo: " + e.message);
+  }
 }
 
 startCamera();
