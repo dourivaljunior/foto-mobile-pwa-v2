@@ -1,4 +1,81 @@
 <!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Captura Forense V2</title>
+  <style>
+    body { font-family: Arial; padding: 16px; text-align:center; background:#f5f5f5; }
+    video { width:100%; border-radius:16px; background:#000; }
+    .btn { width:100%; padding:16px; margin-top:12px; border:none; border-radius:12px; font-size:18px; }
+    .foto { background:#dbeafe; }
+    .video { background:#d1fae5; }
+  </style>
+</head>
+<body>
+  <h2>📸 Captura Forense V2</h2>
+  <video id="video" autoplay playsinline muted></video>
+  <button class="btn foto" onclick="captureDualPhotos()">📸 Foto dupla</button>
+  <button class="btn video" onclick="recordTenSeconds()">🎥 Vídeo 10s</button>
+  <canvas id="canvas" style="display:none"></canvas>
+
+<script>
+const SCRIPT_URL = "COLE_AQUI_URL_DO_APPS_SCRIPT";
+const video = document.getElementById("video");
+let currentStream;
+
+async function startCamera(facing="environment") {
+  if (currentStream) {
+    currentStream.getTracks().forEach(t => t.stop());
+  }
+  currentStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: facing },
+    audio: true
+  });
+  video.srcObject = currentStream;
+  await new Promise(r => setTimeout(r, 1200));
+}
+
+function getLocation() {
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve({ lat: null, lng: null }),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  });
+}
+
+function stampAndCapture(label, gps) {
+  const canvas = document.getElementById("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0);
+
+  const stamp = `${label} | ${new Date().toLocaleString()} | ${gps.lat},${gps.lng}`;
+  ctx.fillStyle = "rgba(0,0,0,0.65)";
+  ctx.fillRect(0, canvas.height - 42, canvas.width, 42);
+  ctx.fillStyle = "white";
+  ctx.font = "20px Arial";
+  ctx.fillText(stamp, 12, canvas.height - 14);
+
+  return canvas.toDataURL("image/jpeg", 0.9);
+}
+
+async function sendPayload(payload) {
+  const res = await fetch(SCRIPT_URL, {
+    method: "POST",
+    redirect: "follow",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload)
+  });
+  return res.text();
+}
+
+async function captureDualPhotos() {
+  const gps = await getLocation();
+
+  await startCamera("environment");
   const rear = stampAndCapture("camera_traseira", gps);
 
   await startCamera("user");
