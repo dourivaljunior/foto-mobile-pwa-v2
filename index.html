@@ -61,6 +61,8 @@
   <canvas id="canvas" style="display:none;"></canvas>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-image/leaflet-image.js"></script>
+
 <script>
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj9Bqd1jNqNqCx8uPEFABYbAOZ08g4nSjwcxgyTqhpxfqpjREv4YlDZuIBB2pqPeUOug/exec";
 
@@ -93,7 +95,8 @@ function initMap(lat, lng) {
     map = L.map("map").setView([lat, lng], 17);
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19
+      maxZoom: 19,
+      crossOrigin: true
     }).addTo(map);
 
     const carIcon = L.divIcon({
@@ -204,39 +207,33 @@ async function captureVideo() {
   }
 }
 
-async function captureMap() {
+function captureMap() {
   try {
-    if (!currentLat || !currentLng) {
-      alert("❌ GPS ainda não carregou");
-      return;
-    }
+    leafletImage(map, async function(err, mapCanvas) {
+      if (err) {
+        console.error(err);
+        alert("❌ Erro ao gerar mapa");
+        return;
+      }
 
-    const mapUrl =
-      `https://staticmap.openstreetmap.de/staticmap.php` +
-      `?center=${currentLat},${currentLng}` +
-      `&zoom=17` +
-      `&size=800x400` +
-      `&markers=${currentLat},${currentLng},red-pushpin`;
+      const mapImage = mapCanvas.toDataURL("image/png");
 
-    const response = await fetch(mapUrl);
-    const blob = await response.blob();
+      try {
+        await sendPayload({
+          mapImage: mapImage,
+          label: "mapa"
+        });
 
-    const reader = new FileReader();
-
-    reader.onloadend = async () => {
-      await sendPayload({
-        mapImage: reader.result,
-        label: "mapa"
-      });
-
-      alert("✅ Mapa enviado");
-    };
-
-    reader.readAsDataURL(blob);
+        alert("✅ Mapa com 🚗 enviado");
+      } catch (e) {
+        console.error(e);
+        alert("❌ Erro ao enviar mapa");
+      }
+    });
 
   } catch (error) {
     console.error(error);
-    alert("❌ Erro ao enviar mapa");
+    alert("❌ Falha geral no mapa");
   }
 }
 
