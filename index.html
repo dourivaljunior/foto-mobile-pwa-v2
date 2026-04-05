@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Captura Automática</title>
+  <title>Fotos Frente e Trás</title>
   <style>
     body {
       font-family: Arial;
@@ -14,150 +14,90 @@
       width: 100%;
       border-radius: 12px;
       background: #000;
-      min-height: 240px;
     }
 
     button {
       width: 100%;
-      padding: 20px;
-      font-size: 22px;
-      font-weight: bold;
+      padding: 16px;
+      font-size: 18px;
+      margin-top: 12px;
       border: none;
       border-radius: 12px;
-      color: white;
-      background: red;
-      margin-top: 16px;
-      touch-action: manipulation;
     }
   </style>
 </head>
 <body>
-  <h2>📸🎥 Captura Automática</h2>
+  <h2>📸 Foto Frontal + Traseira</h2>
 
-  <video id="video" autoplay playsinline muted></video>
-  <button id="btn">🔴 INICIAR</button>
-  <canvas id="canvas" style="display:none"></canvas>
+  <video id="video" autoplay playsinline></video>
+  <button onclick="captureBoth()">Tirar e enviar 2 fotos</button>
+  <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
+const video = document.getElementById("video");
+let currentStream = null;
+
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyQ8iPf8fZ1iJ4q79mLQbKHXv4isuBhy92FaNLB-Q2LAIQYuiqb3ZB_c62bWTDMZIlEKQ/exec";
 
-const video = document.getElementById("video");
-const btn = document.getElementById("btn");
-const canvas = document.getElementById("canvas");
-
-let stream = null;
-let running = false;
-
-async function openCamera(mode, audio = false) {
-  if (stream) {
-    stream.getTracks().forEach(track => track.stop());
+async function startCamera(mode) {
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
   }
 
-  stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: mode },
-    audio
+  currentStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: mode }
   });
 
-  video.srcObject = stream;
+  video.srcObject = currentStream;
+
+  // pequena espera para estabilizar a imagem
   await new Promise(resolve => setTimeout(resolve, 1000));
 }
 
-function capturePhoto() {
-  canvas.width = video.videoWidth || 1280;
-  canvas.height = video.videoHeight || 720;
-
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(video, 0, 0);
-
+function captureImage() {
+  const canvas = document.getElementById("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0);
   return canvas.toDataURL("image/jpeg", 0.8);
 }
 
-async function upload(payload) {
-  const res = await fetch(SCRIPT_URL, {
+function sendImage(image, label) {
+  return fetch(SCRIPT_URL, {
     method: "POST",
     redirect: "follow",
     headers: {
       "Content-Type": "text/plain;charset=utf-8"
     },
-    body: JSON.stringify(payload)
-  });
-
-  return res.text();
-}
-
-function recordVideo2sFromCurrentStream() {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-
-    let recorder;
-    try {
-      recorder = new MediaRecorder(stream, {
-        mimeType: "video/webm"
-      });
-    } catch (e) {
-      reject(new Error("Erro ao iniciar vídeo"));
-      return;
-    }
-
-    recorder.ondataavailable = e => {
-      if (e.data.size > 0) chunks.push(e.data);
-    };
-
-    recorder.onerror = () => reject(new Error("Erro no MediaRecorder"));
-
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: "video/webm" });
-      const reader = new FileReader();
-
-      reader.onloadend = () => resolve(reader.result);
-      reader.readAsDataURL(blob);
-    };
-
-    recorder.start();
-    setTimeout(() => recorder.stop(), 2000);
+    body: JSON.stringify({ image, label })
   });
 }
 
-async function processAll() {
-  if (running) return;
-
-  running = true;
-  btn.style.background = "green";
-  btn.textContent = "🟢 PROCESSANDO...";
-
+async function captureBoth() {
   try {
     // 📸 traseira
-    await openCamera("environment");
-    const rear = capturePhoto();
-    await upload({ image: rear, label: "camera_traseira" });
+    await startCamera("environment");
+    const rear = captureImage();
+    await sendImage(rear, "camera_traseira");
 
     // 🤳 frontal
-    await openCamera("user");
-    const front = capturePhoto();
-    await upload({ image: front, label: "camera_frontal" });
+    await startCamera("user");
+    const front = captureImage();
+    await sendImage(front, "camera_frontal");
 
-    // 🎥 vídeo 2s na traseira
-    await openCamera("environment");
-    const videoData = await recordVideo2sFromCurrentStream();
-    await upload({ video: videoData, label: "video_2s" });
+    // volta para traseira
+    await startCamera("environment");
 
-    alert("✅ Fotos e vídeo enviados");
+    alert("✅ Fotos frontal e traseira enviadas");
 
   } catch (error) {
-    alert("❌ " + error.message);
+    console.error(error);
+    alert("❌ Erro ao capturar ou enviar");
   }
-
-  btn.style.background = "red";
-  btn.textContent = "🔴 INICIAR";
-  running = false;
-
-  await openCamera("environment");
 }
 
-btn.addEventListener("click", processAll);
-
-// preview inicial
-openCamera("environment");
+// inicia preview traseiro
+startCamera("environment");
 </script>
 </body>
 </html>
