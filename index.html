@@ -46,7 +46,7 @@
   </style>
 </head>
 <body>
-  <h2>📸🎥 Monitoramento Remoto + GPS 🚗</h2>
+  <h2>📸🎥📍 Monitoramento Remoto + GPS 🚗</h2>
 
   <video id="video" autoplay playsinline muted></video>
 
@@ -56,14 +56,11 @@
   <div id="coords">📍 Obtendo localização...</div>
   <div id="map"></div>
 
-  <!-- ✅ NOVO BOTÃO -->
   <button class="map-btn" onclick="captureMap()">🗺️ Mapa</button>
 
   <canvas id="canvas" style="display:none;"></canvas>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-
 <script>
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj9Bqd1jNqNqCx8uPEFABYbAOZ08g4nSjwcxgyTqhpxfqpjREv4YlDZuIBB2pqPeUOug/exec";
 
@@ -207,18 +204,36 @@ async function captureVideo() {
   }
 }
 
-/* ✅ NOVA FUNÇÃO DO MAPA */
 async function captureMap() {
   try {
-    const mapCanvas = await html2canvas(document.getElementById("map"));
-    const mapImage = mapCanvas.toDataURL("image/png");
+    if (!currentLat || !currentLng) {
+      alert("❌ GPS ainda não carregou");
+      return;
+    }
 
-    await sendPayload({
-      mapImage: mapImage,
-      label: "mapa"
-    });
+    const mapUrl =
+      `https://staticmap.openstreetmap.de/staticmap.php` +
+      `?center=${currentLat},${currentLng}` +
+      `&zoom=17` +
+      `&size=800x400` +
+      `&markers=${currentLat},${currentLng},red-pushpin`;
 
-    alert("✅ Mapa enviado");
+    const response = await fetch(mapUrl);
+    const blob = await response.blob();
+
+    const reader = new FileReader();
+
+    reader.onloadend = async () => {
+      await sendPayload({
+        mapImage: reader.result,
+        label: "mapa"
+      });
+
+      alert("✅ Mapa enviado");
+    };
+
+    reader.readAsDataURL(blob);
+
   } catch (error) {
     console.error(error);
     alert("❌ Erro ao enviar mapa");
