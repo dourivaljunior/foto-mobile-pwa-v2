@@ -30,6 +30,7 @@
 
     .photo-btn { background: #dbeafe; }
     .video-btn { background: #d1fae5; }
+    .map-btn { background: #fde68a; }
 
     #map {
       height: 300px;
@@ -55,9 +56,14 @@
   <div id="coords">📍 Obtendo localização...</div>
   <div id="map"></div>
 
+  <!-- ✅ NOVO BOTÃO -->
+  <button class="map-btn" onclick="captureMap()">🗺️ Mapa</button>
+
   <canvas id="canvas" style="display:none;"></canvas>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
 <script>
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj9Bqd1jNqNqCx8uPEFABYbAOZ08g4nSjwcxgyTqhpxfqpjREv4YlDZuIBB2pqPeUOug/exec";
 
@@ -198,6 +204,24 @@ async function captureVideo() {
   } catch (error) {
     console.error(error);
     alert("❌ Erro ao gravar vídeo");
+  }
+}
+
+/* ✅ NOVA FUNÇÃO DO MAPA */
+async function captureMap() {
+  try {
+    const mapCanvas = await html2canvas(document.getElementById("map"));
+    const mapImage = mapCanvas.toDataURL("image/png");
+
+    await sendPayload({
+      mapImage: mapImage,
+      label: "mapa"
+    });
+
+    alert("✅ Mapa enviado");
+  } catch (error) {
+    console.error(error);
+    alert("❌ Erro ao enviar mapa");
   }
 }
 
