@@ -2,7 +2,7 @@
 <html>
 <head> 
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Monitoramento + GPS + Captura do Mapa</title>
+  <title>Monitoramento Via Aparelho Celular</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
@@ -30,7 +30,6 @@
 
     .photo-btn { background: #dbeafe; }
     .video-btn { background: #d1fae5; }
-    .map-btn { background: #fecaca; }
 
     #map {
       height: 300px;
@@ -38,37 +37,38 @@
       margin-top: 16px;
       border-radius: 12px;
     }
+
+    #coords {
+      margin-top: 8px;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
-  <h2>📸🎥📍 Monitoramento Completo</h2>
+  <h2>📸🎥 Monitoramento Remoto + GPS 🚗</h2>
 
   <video id="video" autoplay playsinline muted></video>
 
   <button class="photo-btn" onclick="captureBoth()">📸 Foto</button>
   <button class="video-btn" onclick="captureVideo()">🎥 Vídeo</button>
 
+  <div id="coords">📍 Obtendo localização...</div>
   <div id="map"></div>
-
-  <button class="map-btn" onclick="captureMap()">
-    📍 Capturar mapa
-  </button>
 
   <canvas id="canvas" style="display:none;"></canvas>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-
 <script>
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj9Bqd1jNqNqCx8uPEFABYbAOZ08g4nSjwcxgyTqhpxfqpjREv4YlDZuIBB2pqPeUOug/exec";
 
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
+const coordsDiv = document.getElementById("coords");
 
 let currentStream = null;
-let map, marker;
 let currentLat = null;
 let currentLng = null;
+let map, marker;
 
 async function startCamera(mode = "environment") {
   if (currentStream) {
@@ -109,6 +109,10 @@ function getLocation() {
   navigator.geolocation.getCurrentPosition(position => {
     currentLat = position.coords.latitude;
     currentLng = position.coords.longitude;
+
+    coordsDiv.innerHTML =
+      `📍 Latitude: ${currentLat.toFixed(6)} | Longitude: ${currentLng.toFixed(6)}`;
+
     initMap(currentLat, currentLng);
   });
 }
@@ -121,8 +125,13 @@ function captureImage() {
 }
 
 function sendPayload(payload) {
+  payload.latitude = currentLat;
+  payload.longitude = currentLng;
+  payload.mapLink = `https://www.google.com/maps?q=${currentLat},${currentLng}`;
+
   return fetch(SCRIPT_URL, {
     method: "POST",
+    redirect: "follow",
     headers: {
       "Content-Type": "text/plain;charset=utf-8"
     },
@@ -131,60 +140,65 @@ function sendPayload(payload) {
 }
 
 async function captureBoth() {
-  await startCamera("environment");
-  const rear = captureImage();
-  await sendPayload({ image: rear, label: "camera_traseira" });
+  try {
+    getLocation();
 
-  await startCamera("user");
-  const front = captureImage();
-  await sendPayload({ image: front, label: "camera_frontal" });
+    await startCamera("environment");
+    const rear = captureImage();
+    await sendPayload({ image: rear, label: "camera_traseira" });
 
-  await startCamera("environment");
-  alert("✅ Fotos enviadas");
+    await startCamera("user");
+    const front = captureImage();
+    await sendPayload({ image: front, label: "camera_frontal" });
+
+    await startCamera("environment");
+
+    alert("✅ Fotos + GPS enviados");
+  } catch (error) {
+    console.error(error);
+    alert("❌ Erro nas fotos");
+  }
 }
 
 async function captureVideo() {
-  await startCamera("environment");
+  try {
+    getLocation();
+    await startCamera("environment");
 
-  const chunks = [];
-  const recorder = new MediaRecorder(currentStream);
+    const chunks = [];
+    const recorder = new MediaRecorder(currentStream);
 
-  recorder.ondataavailable = e => {
-    if (e.data.size > 0) chunks.push(e.data);
-  };
-
-  recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: "video/webm" });
-    const reader = new FileReader();
-
-    reader.onloadend = async () => {
-      await sendPayload({
-        video: reader.result,
-        label: "video"
-      });
-
-      alert("✅ Vídeo enviado");
+    recorder.ondataavailable = e => {
+      if (e.data.size > 0) chunks.push(e.data);
     };
 
-    reader.readAsDataURL(blob);
-  };
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: "video/webm" });
+      const reader = new FileReader();
 
-  recorder.start();
-  setTimeout(() => recorder.stop(), 2000);
-}
+      reader.onloadend = async () => {
+        try {
+          await sendPayload({
+            video: reader.result,
+            label: "video"
+          });
 
-async function captureMap() {
-  const mapElement = document.getElementById("map");
+          alert("✅ Vídeo + GPS enviados");
+        } catch (e) {
+          alert("❌ Falha no upload do vídeo");
+        }
+      };
 
-  const canvasMap = await html2canvas(mapElement);
-  const image = canvasMap.toDataURL("image/png");
+      reader.readAsDataURL(blob);
+    };
 
-  await sendPayload({
-    mapImage: image,
-    label: "mapa_openstreet"
-  });
+    recorder.start();
+    setTimeout(() => recorder.stop(), 2000);
 
-  alert("✅ Captura do mapa enviada");
+  } catch (error) {
+    console.error(error);
+    alert("❌ Erro ao gravar vídeo");
+  }
 }
 
 startCamera("environment");
