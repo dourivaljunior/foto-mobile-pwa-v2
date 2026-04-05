@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fotos + Vídeo Estável</title>
+  <title>Fotos + Vídeo Fiel</title>
   <style>
     body {
       font-family: Arial;
@@ -44,17 +44,18 @@
   </button>
 
   <button class="video-btn" onclick="captureVideo()">
-    🎥 Gravar vídeo 3s
+    🎥 Gravar vídeo 10s
   </button>
 
   <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyQ8iPf8fZ1iJ4q79mLQbKHXv4isuBhy92FaNLB-Q2LAIQYuiqb3ZB_c62bWTDMZIlEKQ/exec";
+
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
-let currentStream = null;
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyQ8iPf8fZ1iJ4q79mLQbKHXv4isuBhy92FaNLB-Q2LAIQYuiqb3ZB_c62bWTDMZIlEKQ/exec";
+let currentStream = null;
 
 async function startCamera(mode = "environment") {
   if (currentStream) {
@@ -69,7 +70,7 @@ async function startCamera(mode = "environment") {
   video.srcObject = currentStream;
   await video.play();
 
-  // estabiliza igual ao fluxo antigo que funcionou
+  // mesmo tempo de estabilização do script que funcionou
   await new Promise(resolve => setTimeout(resolve, 1000));
 }
 
@@ -95,17 +96,11 @@ async function captureBoth() {
   try {
     await startCamera("environment");
     const rear = captureImage();
-    await sendPayload({
-      image: rear,
-      label: "camera_traseira"
-    });
+    await sendPayload({ image: rear, label: "camera_traseira" });
 
     await startCamera("user");
     const front = captureImage();
-    await sendPayload({
-      image: front,
-      label: "camera_frontal"
-    });
+    await sendPayload({ image: front, label: "camera_frontal" });
 
     await startCamera("environment");
 
@@ -118,31 +113,27 @@ async function captureBoth() {
 
 async function captureVideo() {
   try {
-    // 👇 usa a stream já aberta da traseira
     await startCamera("environment");
 
     const chunks = [];
     const recorder = new MediaRecorder(currentStream);
 
     recorder.ondataavailable = e => {
-      if (e.data.size > 0) {
-        chunks.push(e.data);
-      }
+      if (e.data.size > 0) chunks.push(e.data);
     };
 
     recorder.onstop = () => {
       const blob = new Blob(chunks, { type: "video/webm" });
-
       const reader = new FileReader();
 
       reader.onloadend = async () => {
         try {
           await sendPayload({
             video: reader.result,
-            label: "video_3s"
+            label: "video_10s"
           });
 
-          alert("✅ Vídeo enviado");
+          alert("✅ Vídeo enviado ao Drive");
         } catch (e) {
           alert("❌ Falha no upload do vídeo");
         }
@@ -152,10 +143,7 @@ async function captureVideo() {
     };
 
     recorder.start();
-
-    setTimeout(() => {
-      recorder.stop();
-    }, 3000);
+    setTimeout(() => recorder.stop(), 10000);
 
   } catch (error) {
     console.error(error);
