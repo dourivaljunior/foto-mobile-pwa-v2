@@ -1,237 +1,351 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head> 
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Monitoramento Via Aparelho Celular</title>
-
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Sistema de Monitoramento</title>
 
   <style>
+    :root {
+      --bg-color: #121212;
+      --card-bg: rgba(255, 255, 255, 0.05);
+      --text-main: #e0e0e0;
+      --accent-blue: #3b82f6;
+      --accent-green: #10b981;
+      --accent-yellow: #f59e0b;
+      --border-radius: 16px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: Arial;
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       padding: 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 500px;
+      background: var(--card-bg);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: var(--border-radius);
+      padding: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    h2 {
       text-align: center;
+      font-size: 1.5rem;
+      margin-bottom: 20px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .video-container {
+      position: relative;
+      width: 100%;
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      background: #000;
+      margin-bottom: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     }
 
     video {
       width: 100%;
-      border-radius: 12px;
-      background: #000;
+      display: block;
+      object-fit: cover;
+    }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 15px;
     }
 
     button {
-      width: 100%;
-      padding: 16px;
-      font-size: 18px;
-      margin-top: 12px;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: bold;
       border: none;
       border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: transform 0.1s, opacity 0.2s;
+      color: #fff;
     }
 
-    .photo-btn { background: #dbeafe; }
-    .video-btn { background: #d1fae5; }
-    .map-btn { background: #fde68a; }
+    button:active { transform: scale(0.96); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    #map {
-      height: 300px;
-      width: 100%;
-      margin-top: 16px;
+    .btn-photo { background-color: var(--accent-blue); }
+    .btn-video { background-color: var(--accent-green); }
+    .btn-map { background-color: var(--accent-yellow); color: #000; grid-column: span 2; }
+
+    .info-panel {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 12px;
       border-radius: 12px;
+      font-size: 0.9rem;
+      text-align: center;
+      margin-bottom: 15px;
+      word-break: break-all;
     }
 
-    #coords {
-      margin-top: 8px;
-      font-size: 14px;
+    .map-preview {
+      width: 100%;
+      height: 250px;
+      border-radius: var(--border-radius);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: #222;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
+
+    iframe { width: 100%; height: 100%; border: none; border-radius: var(--border-radius); }
+
+    /* Toast Notification */
+    #toast {
+      visibility: hidden;
+      min-width: 250px;
+      background-color: #333;
+      color: #fff;
+      text-align: center;
+      border-radius: 8px;
+      padding: 16px;
+      position: fixed;
+      z-index: 1000;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      opacity: 0;
+      transition: opacity 0.3s, bottom 0.3s;
+    }
+    #toast.show { visibility: visible; opacity: 1; bottom: 50px; }
+
   </style>
 </head>
 <body>
-  <h2>📸🎥📍 Monitoramento Remoto + GPS 🚗</h2>
 
-  <video id="video" autoplay playsinline muted></video>
+  <div class="container">
+    <h2>📡 Central de Monitoramento</h2>
 
-  <button class="photo-btn" onclick="captureBoth()">📸 Foto</button>
-  <button class="video-btn" onclick="captureVideo()">🎥 Vídeo</button>
+    <div class="video-container">
+      <video id="video" autoplay playsinline muted></video>
+    </div>
 
-  <div id="coords">📍 Obtendo localização...</div>
-  <div id="map"></div>
+    <div class="btn-group">
+      <button class="btn-photo" id="btnPhoto" onclick="captureBoth()">📸 Fotos</button>
+      <button class="btn-video" id="btnVideo" onclick="captureVideo()">🎥 Vídeo</button>
+      <button class="btn-map" id="btnMap" onclick="sendMapData()">🗺️ Enviar Mapa P/ Drive</button>
+    </div>
 
-  <button class="map-btn" onclick="captureMap()">🗺️ Mapa</button>
+    <div class="info-panel" id="coords">📍 Aguardando sinal de GPS...</div>
+
+    <div class="map-preview" id="mapContainer">
+      <span id="mapPlaceholder">Mapa aparecerá aqui</span>
+    </div>
+  </div>
 
   <canvas id="canvas" style="display:none;"></canvas>
+  <div id="toast">Notificação</div>
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj9Bqd1jNqNqCx8uPEFABYbAOZ08g4nSjwcxgyTqhpxfqpjREv4YlDZuIBB2pqPeUOug/exec";
+  // ==========================================
+  // CONFIGURAÇÕES
+  // ==========================================
+  const SCRIPT_URL = "COLE_SUA_URL_DO_WEB_APP_AQUI"; 
+  
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+  const coordsDiv = document.getElementById("coords");
+  const mapContainer = document.getElementById("mapContainer");
 
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const coordsDiv = document.getElementById("coords");
+  let currentStream = null;
+  let currentLat = null;
+  let currentLng = null;
 
-let currentStream = null;
-let currentLat = null;
-let currentLng = null;
-let map, marker;
+  // ==========================================
+  // UTILITÁRIOS
+  // ==========================================
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function startCamera(mode = "environment") {
-  if (currentStream) {
-    currentStream.getTracks().forEach(track => track.stop());
+  function showToast(message, isError = false) {
+    const toast = document.getElementById("toast");
+    toast.textContent = message;
+    toast.style.backgroundColor = isError ? "#ef4444" : "#10b981";
+    toast.className = "show";
+    setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
   }
 
-  currentStream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: mode },
-    audio: false
-  });
-
-  video.srcObject = currentStream;
-  await video.play();
-  await new Promise(resolve => setTimeout(resolve, 1000));
-}
-
-function initMap(lat, lng) {
-  if (!map) {
-    map = L.map("map").setView([lat, lng], 17);
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19
-    }).addTo(map);
-
-    const carIcon = L.divIcon({
-      html: '<div style="font-size:32px;">🚗</div>',
-      className: ""
-    });
-
-    marker = L.marker([lat, lng], { icon: carIcon }).addTo(map);
-  } else {
-    map.setView([lat, lng], 17);
-    marker.setLatLng([lat, lng]);
+  function toggleButtons(state) {
+    document.getElementById("btnPhoto").disabled = !state;
+    document.getElementById("btnVideo").disabled = !state;
+    document.getElementById("btnMap").disabled = !state;
   }
-}
 
-function getLocation() {
-  navigator.geolocation.getCurrentPosition(position => {
-    currentLat = position.coords.latitude;
-    currentLng = position.coords.longitude;
-
-    coordsDiv.innerHTML =
-      `📍 Latitude: ${currentLat.toFixed(6)} | Longitude: ${currentLng.toFixed(6)}`;
-
-    initMap(currentLat, currentLng);
-  });
-}
-
-function captureImage() {
-  canvas.width = video.videoWidth || 1280;
-  canvas.height = video.videoHeight || 720;
-  canvas.getContext("2d").drawImage(video, 0, 0);
-  return canvas.toDataURL("image/jpeg", 0.8);
-}
-
-function sendPayload(payload) {
-  payload.latitude = currentLat;
-  payload.longitude = currentLng;
-  payload.mapLink = `https://www.google.com/maps?q=${currentLat},${currentLng}`;
-
-  return fetch(SCRIPT_URL, {
-    method: "POST",
-    redirect: "follow",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8"
-    },
-    body: JSON.stringify(payload)
-  });
-}
-
-async function captureBoth() {
-  try {
-    getLocation();
-
-    await startCamera("environment");
-    const rear = captureImage();
-    await sendPayload({ image: rear, label: "camera_traseira" });
-
-    await startCamera("user");
-    const front = captureImage();
-    await sendPayload({ image: front, label: "camera_frontal" });
-
-    await startCamera("environment");
-
-    alert("✅ Fotos + GPS enviados");
-  } catch (error) {
-    console.error(error);
-    alert("❌ Erro nas fotos");
+  // ==========================================
+  // CÂMERA E GPS
+  // ==========================================
+  async function startCamera(mode = "environment") {
+    if (currentStream) {
+      currentStream.getTracks().forEach(track => track.stop());
+    }
+    try {
+      currentStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      });
+      video.srcObject = currentStream;
+      await video.play();
+      await sleep(800); // Tempo para o foco ajustar
+    } catch (err) {
+      console.error("Erro na câmera:", err);
+      showToast("Erro ao acessar câmera", true);
+    }
   }
-}
 
-async function captureVideo() {
-  try {
-    getLocation();
-    await startCamera("environment");
-
-    const chunks = [];
-    const recorder = new MediaRecorder(currentStream);
-
-    recorder.ondataavailable = e => {
-      if (e.data.size > 0) chunks.push(e.data);
-    };
-
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: "video/webm" });
-      const reader = new FileReader();
-
-      reader.onloadend = async () => {
-        try {
-          await sendPayload({
-            video: reader.result,
-            label: "video"
-          });
-
-          alert("✅ Vídeo + GPS enviados");
-        } catch (e) {
-          alert("❌ Falha no upload do vídeo");
-        }
-      };
-
-      reader.readAsDataURL(blob);
-    };
-
-    recorder.start();
-    setTimeout(() => recorder.stop(), 2000);
-
-  } catch (error) {
-    console.error(error);
-    alert("❌ Erro ao gravar vídeo");
+  function updateMapIframe(lat, lng) {
+    mapContainer.innerHTML = `<iframe src="https://maps.google.com/maps?q=${lat},${lng}&z=16&output=embed" loading="lazy" allowfullscreen></iframe>`;
   }
-}
 
-async function captureMap() {
-  try {
-    if (!currentLat || !currentLng) {
-      alert("❌ GPS ainda não carregou");
-      return;
+  function getLocation() {
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(position => {
+        const isFirstLoad = (currentLat === null);
+        currentLat = position.coords.latitude;
+        currentLng = position.coords.longitude;
+        
+        coordsDiv.innerHTML = `📍 Lat: ${currentLat.toFixed(5)} <br> 📍 Lng: ${currentLng.toFixed(5)}`;
+        
+        if (isFirstLoad) updateMapIframe(currentLat, currentLng);
+      }, error => {
+        coordsDiv.innerHTML = "❌ GPS Negado ou Indisponível";
+      }, { enableHighAccuracy: true });
+    }
+  }
+
+  // ==========================================
+  // CAPTURA E ENVIO
+  // ==========================================
+  function captureImage() {
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    return canvas.toDataURL("image/jpeg", 0.7);
+  }
+
+  async function sendPayload(payload) {
+    if (currentLat && currentLng) {
+      payload.latitude = currentLat;
+      payload.longitude = currentLng;
+      payload.mapLink = `https://www.google.com/maps?q=${currentLat},${currentLng}`;
     }
 
-    const mapUrl =
-      `https://staticmap.openstreetmap.de/staticmap.php` +
-      `?center=${currentLat},${currentLng}` +
-      `&zoom=17` +
-      `&size=800x400` +
-      `&markers=${currentLat},${currentLng},red-pushpin`;
-
-    await sendPayload({
-      mapImage: mapUrl,
-      label: "mapa"
-    });
-
-    alert("✅ Mapa + GPS enviados");
-  } catch (error) {
-    console.error(error);
-    alert("❌ Erro ao enviar mapa");
+    try {
+      await fetch(SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors", // Evita problemas de CORS no frontend
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
   }
-}
 
-startCamera("environment");
-getLocation();
+  async function captureBoth() {
+    toggleButtons(false);
+    showToast("Capturando fotos...");
+    
+    try {
+      await startCamera("environment");
+      const rear = captureImage();
+      await sendPayload({ image: rear, label: "traseira" });
+
+      await startCamera("user");
+      const front = captureImage();
+      await sendPayload({ image: front, label: "frontal" });
+
+      await startCamera("environment"); // Volta para traseira
+      showToast("Fotos enviadas com sucesso!");
+    } catch (error) {
+      showToast("Falha ao capturar fotos", true);
+    }
+    toggleButtons(true);
+  }
+
+  async function captureVideo() {
+    toggleButtons(false);
+    showToast("Gravando vídeo (3s)...");
+
+    try {
+      await startCamera("environment");
+      const chunks = [];
+      const recorder = new MediaRecorder(currentStream, { mimeType: 'video/webm' });
+
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: "video/webm" });
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          showToast("Enviando vídeo...");
+          const success = await sendPayload({ video: reader.result, label: "video_ambiente" });
+          if (success) showToast("Vídeo enviado!");
+          else showToast("Falha no upload", true);
+          toggleButtons(true);
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      recorder.start();
+      setTimeout(() => recorder.stop(), 3000); // Grava por 3 segundos
+    } catch (error) {
+      showToast("Erro ao gravar", true);
+      toggleButtons(true);
+    }
+  }
+
+  async function sendMapData() {
+    if (!currentLat || !currentLng) {
+      showToast("Aguarde o GPS carregar", true);
+      return;
+    }
+    toggleButtons(false);
+    showToast("Gerando mapa no Drive...");
+    
+    const success = await sendPayload({ label: "mapa" });
+    
+    if (success) showToast("Mapa e GPS salvos no Drive!");
+    else showToast("Erro ao salvar mapa", true);
+    
+    toggleButtons(true);
+  }
+
+  // Inicialização
+  window.onload = () => {
+    startCamera("environment");
+    getLocation();
+  };
 </script>
 </body>
 </html>
