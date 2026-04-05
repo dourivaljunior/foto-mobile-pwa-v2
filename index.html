@@ -35,16 +35,16 @@
   </style>
 </head>
 <body>
-  <h2>📸🎥 Fotos + Vídeo</h2>
+  <h2>📸🎥 Monitoramento Remoto Pela Camera do Aparelho Celular </br>Envio e Armazenamento de Arquivos Para o Google Drive </h2>
 
   <video id="video" autoplay playsinline muted></video>
 
   <button class="photo-btn" onclick="captureBoth()">
-    📸 Tirar frontal + traseira
+    📸 Foto
   </button>
 
   <button class="video-btn" onclick="captureVideo()">
-    🎥 Gravar vídeo 10s
+    🎥 Vídeo
   </button>
 
   <canvas id="canvas" style="display:none;"></canvas>
@@ -129,7 +129,7 @@ async function captureVideo() {
         try {
           await sendPayload({
             video: reader.result,
-            label: "video_10s"
+            label: "video"
           });
 
           alert("✅ Vídeo enviado ao Drive");
@@ -142,7 +142,7 @@ async function captureVideo() {
     };
 
     recorder.start();
-    setTimeout(() => recorder.stop(), 10000);
+    setTimeout(() => recorder.stop(), 2000);
 
   } catch (error) {
     console.error(error);
