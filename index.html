@@ -2,73 +2,144 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Captura Forense V2</title>
+  <title>Captura Automática</title>
   <style>
-    body { font-family: Arial; padding: 16px; text-align:center; background:#f5f5f5; }
-    video { width:100%; border-radius:16px; background:#000; min-height:240px; }
-    .btn { width:100%; padding:16px; margin-top:12px; border:none; border-radius:12px; font-size:18px; }
-    .foto { background:#dbeafe; }
-    .video { background:#d1fae5; }
+    body {
+      font-family: Arial;
+      padding: 20px;
+      text-align: center;
+    }
+
+    video {
+      width: 100%;
+      border-radius: 12px;
+      background: #000;
+    }
+
+    button {
+      width: 100%;
+      padding: 20px;
+      font-size: 22px;
+      margin-top: 16px;
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-weight: bold;
+      background: red;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
   </style>
 </head>
 <body>
-  <h2>📸 Captura Forense V2</h2>
+  <h2>📸🎥 Captura Automática</h2>
   <video id="video" autoplay playsinline muted></video>
-  <button class="btn foto" onclick="captureDualPhotos()">📸 Foto dupla</button>
-  <button class="btn video" onclick="recordTenSeconds()">🎥 Vídeo 10s</button>
-  <canvas id="canvas" style="display:none"></canvas>
+  <button id="startBtn" onclick="startProcess()">🔴 INICIAR</button>
+  <canvas id="canvas" style="display:none;"></canvas>
+
 <script>
 const video = document.getElementById("video");
+const btn = document.getElementById("startBtn");
 let currentStream = null;
+let running = false;
 
-async function startCamera(mode) {
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzfwZM3hadJYyswOx-0hFE6Y63GoCsetplzwyYYuPe9b5o1f6NdoVEF9cEolt1caTFg/exec";
+
+async function startCamera(mode, audio=false) {
   if (currentStream) {
     currentStream.getTracks().forEach(track => track.stop());
   }
 
   currentStream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: mode }
+    video: { facingMode: mode },
+    audio
   });
 
   video.srcObject = currentStream;
   await new Promise(resolve => setTimeout(resolve, 1000));
 }
 
-async function sendImage(image, label) {
-  return fetch("https://script.google.com/macros/s/AKfycbyQ8iPf8fZ1iJ4q79mLQbKHXv4isuBhy92FaNLB-Q2LAIQYuiqb3ZB_c62bWTDMZIlEKQ/exec", {
+async function sendFile(payload) {
+  await fetch(SCRIPT_URL, {
     method: "POST",
     redirect: "follow",
     headers: {
       "Content-Type": "text/plain;charset=utf-8"
     },
-    body: JSON.stringify({ image, label })
+    body: JSON.stringify(payload)
   });
 }
 
-async function capture() {
+function capturePhoto() {
   const canvas = document.getElementById("canvas");
-
-  // 📸 FOTO TRASEIRA
-  await startCamera("environment");
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   canvas.getContext("2d").drawImage(video, 0, 0);
-  const rearImage = canvas.toDataURL("image/jpeg", 0.8);
-  await sendImage(rearImage, "camera_traseira");
-
-  // 🤳 FOTO FRONTAL
-  await startCamera("user");
-  canvas.getContext("2d").drawImage(video, 0, 0);
-  const frontImage = canvas.toDataURL("image/jpeg", 0.8);
-  await sendImage(frontImage, "camera_frontal");
-
-  // 🔁 volta para traseira
-  await startCamera("environment");
-
-  alert("✅ Fotos frontal e traseira enviadas");
+  return canvas.toDataURL("image/jpeg", 0.8);
 }
 
-// inicia já com traseira
+async function recordVideo10s() {
+  await startCamera("environment", true);
+
+  return new Promise(resolve => {
+    const chunks = [];
+    const recorder = new MediaRecorder(currentStream);
+
+    recorder.ondataavailable = e => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: "video/webm" });
+      const reader = new FileReader();
+
+      reader.onloadend = () => {
+        resolve(reader.result);
+      };
+
+      reader.readAsDataURL(blob);
+    };
+
+    recorder.start();
+    setTimeout(() => recorder.stop(), 10000);
+  });
+}
+
+async function startProcess() {
+  if (running) return;
+
+  running = true;
+  btn.style.background = "green";
+  btn.innerText = "🟢 PROCESSANDO...";
+
+  try {
+    // 📸 traseira
+    await startCamera("environment");
+    const rear = capturePhoto();
+    await sendFile({ image: rear, label: "camera_traseira" });
+
+    // 🤳 frontal
+    await startCamera("user");
+    const front = capturePhoto();
+    await sendFile({ image: front, label: "camera_frontal" });
+
+    // 🎥 vídeo 10s
+    const videoData = await recordVideo10s();
+    await sendFile({ video: videoData, label: "video_10s" });
+
+    alert("✅ Fotos e vídeo enviados com sucesso");
+
+  } catch (error) {
+    alert("❌ Erro: " + error.message);
+  }
+
+  btn.style.background = "red";
+  btn.innerText = "🔴 INICIAR";
+  running = false;
+
+  await startCamera("environment");
+}
+
 startCamera("environment");
 </script>
 </body>
