@@ -1,112 +1,106 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monitoramento Mobile</title>
+    <title>Monitoramento Google</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a0a0a; color: white; margin: 0; padding: 20px; text-align: center; }
-        .container { max-width: 450px; margin: auto; background: #1a1a1a; padding: 20px; border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); border: 1px solid #333; }
-        video { width: 100%; border-radius: 15px; background: #000; box-shadow: inset 0 0 10px #000; }
-        .btn { width: 100%; padding: 18px; margin: 10px 0; border: none; border-radius: 15px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; color: white; }
-        .btn-blue { background: #2563eb; }
-        .btn-green { background: #059669; }
-        .btn-gold { background: #d97706; }
-        .btn:active { transform: scale(0.98); opacity: 0.8; }
-        #coords { font-size: 12px; color: #888; margin: 10px 0; background: #000; padding: 10px; border-radius: 10px; }
-        #map-preview { width: 100%; height: 200px; border-radius: 15px; margin-top: 10px; border: 1px solid #444; }
+        body { font-family: sans-serif; text-align: center; background: #121212; color: white; padding: 20px; }
+        video { width: 100%; max-width: 400px; border-radius: 10px; background: #000; }
+        button { width: 100%; max-width: 400px; padding: 20px; margin: 10px 0; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-size: 16px; }
+        .btn-blue { background: #007bff; color: white; }
+        .btn-green { background: #28a745; color: white; }
+        .btn-orange { background: #fd7e14; color: white; }
+        #log { font-size: 12px; color: #aaa; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2 style="margin-top:0">📸 Monitoramento Ativo</h2>
+    <h2>📡 Monitoramento Remoto</h2>
     <video id="video" autoplay playsinline muted></video>
     
-    <button class="btn btn-blue" onclick="captureBoth()">📸 CAPTURAR FOTOS (F + T)</button>
-    <button class="btn btn-green" onclick="captureVideo()">🎥 GRAVAR VÍDEO CURTO</button>
+    <button class="btn-blue" onclick="capturarFotos()">📸 CAPTURAR FOTOS (F+T)</button>
+    <button class="btn-green" onclick="capturarVideo()">🎥 GRAVAR VÍDEO (3s)</button>
+    <button class="btn-orange" onclick="enviarLocalizacao()">📍 ENVIAR MAPA + GPS</button>
     
-    <div id="coords">📍 Localizando GPS...</div>
-    <div id="map-preview"></div>
-    
-    <button class="btn btn-gold" onclick="sendMapOnly()">🗺️ ENVIAR MAPA AO DRIVE</button>
-</div>
-
-<canvas id="canvas" style="display:none;"></canvas>
+    <div id="log">Aguardando...</div>
+    <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby1C6QyoUApB_2AYgYjX5Y2TlbfSh20_j-LAq3fxyQaTLRtWgJd_HTciZ6vOUhJ0hDU/exec";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxuAt3TNC7PfbRysSp8GXu750I4smVO5L3iNRfe-QrQJVHgMB_WRfKlUoDUom6-MrNzyg/exec";
     const video = document.getElementById("video");
-    const coordsDiv = document.getElementById("coords");
+    const log = document.getElementById("log");
     let lat, lng, stream;
 
-    // Inicialização da Câmera
-    async function initCam(mode = "environment") {
-        if(stream) stream.getTracks().forEach(t => t.stop());
-        stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: mode}, audio: false});
-        video.srcObject = stream;
+    // Iniciar Câmera e GPS
+    async function start() {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}});
+            video.srcObject = stream;
+            navigator.geolocation.watchPosition(p => {
+                lat = p.coords.latitude;
+                lng = p.coords.longitude;
+                log.innerText = `GPS OK: ${lat}, ${lng}`;
+            });
+        } catch (e) { log.innerText = "Erro ao iniciar: " + e; }
     }
 
-    // GPS em tempo real
-    navigator.geolocation.watchPosition(p => {
-        lat = p.coords.latitude;
-        lng = p.coords.longitude;
-        coordsDiv.innerHTML = `📍 Lat: ${lat.toFixed(6)} | Lng: ${lng.toFixed(6)}`;
-        document.getElementById("map-preview").innerHTML = `<iframe width="100%" height="100%" frameborder="0" style="border:0; border-radius:15px;" src="https://maps.google.com/maps?q=${lat},${lng}&z=16&output=embed"></iframe>`;
-    });
+    async function changeCam(mode) {
+        if(stream) stream.getTracks().forEach(t => t.stop());
+        stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: mode}});
+        video.srcObject = stream;
+        await new Promise(r => setTimeout(r, 1000));
+    }
 
-    async function send(payload) {
+    async function enviar(payload) {
+        log.innerText = "Enviando...";
         payload.latitude = lat;
         payload.longitude = lng;
         payload.mapLink = `https://www.google.com/maps?q=${lat},${lng}`;
-        
+
         return fetch(SCRIPT_URL, {
             method: "POST",
-            mode: "no-cors",
-            headers: {"Content-Type": "text/plain"},
+            mode: "no-cors", // Necessário para Google Scripts
+            cache: "no-cache",
+            headers: {"Content-Type": "application/json"},
             body: JSON.stringify(payload)
-        });
+        }).then(() => log.innerText = "✅ Enviado!");
     }
 
-    async function captureBoth() {
-        // Foto Traseira
-        await initCam("environment");
-        await new Promise(r => setTimeout(r, 1000));
+    async function capturarFotos() {
         const c = document.getElementById("canvas");
-        c.width = video.videoWidth; c.height = video.videoHeight;
-        c.getContext("2d").drawImage(video, 0, 0);
-        await send({image: c.toDataURL("image/jpeg"), label: "camera_traseira"});
+        const ctx = c.getContext("2d");
 
-        // Foto Frontal
-        await initCam("user");
-        await new Promise(r => setTimeout(r, 1000));
-        c.getContext("2d").drawImage(video, 0, 0);
-        await send({image: c.toDataURL("image/jpeg"), label: "camera_frontal"});
+        await changeCam("environment");
+        c.width = video.videoWidth; c.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        await enviar({image: c.toDataURL("image/jpeg"), label: "TRASEIRA"});
+
+        await changeCam("user");
+        ctx.drawImage(video, 0, 0);
+        await enviar({image: c.toDataURL("image/jpeg"), label: "FRONTAL"});
         
-        await initCam("environment");
-        alert("✅ Fotos e GPS Enviados!");
+        await changeCam("environment");
     }
 
-    async function captureVideo() {
-        await initCam("environment");
+    async function capturarVideo() {
         const chunks = [];
         const recorder = new MediaRecorder(stream);
         recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = () => {
+        recorder.onstop = async () => {
             const reader = new FileReader();
             reader.readAsDataURL(new Blob(chunks, {type: "video/webm"}));
-            reader.onloadend = () => send({video: reader.result, label: "video_ambiente"});
+            reader.onloadend = () => enviar({video: reader.result});
         };
         recorder.start();
-        setTimeout(() => { recorder.stop(); alert("✅ Vídeo Enviado!"); }, 3000);
+        setTimeout(() => recorder.stop(), 3000);
     }
 
-    function sendMapOnly() {
-        send({label: "mapa"});
-        alert("✅ Print do Mapa solicitado ao servidor!");
+    function enviarLocalizacao() {
+        enviar({tipo: "mapa"});
     }
 
-    initCam();
+    start();
 </script>
 </body>
 </html>
