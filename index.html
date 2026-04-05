@@ -2,7 +2,10 @@
 <html>
 <head> 
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Monitoramento Via Aparelho Celular</title>
+  <title>Monitoramento Via Aparelho Celular V2</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
   <style>
     body {
       font-family: Arial;
@@ -25,36 +28,47 @@
       border-radius: 12px;
     }
 
-    .photo-btn {
-      background: #dbeafe;
+    .photo-btn { background: #dbeafe; }
+    .video-btn { background: #d1fae5; }
+
+    #map {
+      height: 300px;
+      width: 100%;
+      margin-top: 16px;
+      border-radius: 12px;
     }
 
-    .video-btn {
-      background: #d1fae5;
+    #coords {
+      margin-top: 8px;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
-  <h2>📸🎥 Monitoramento Remoto Pela Camera do Aparelho Celular </br>Envio e Armazenamento de Arquivos Para o Google Drive </h2>
+  <h2>📸🎥 Monitoramento Remoto + GPS 🚗</h2>
 
   <video id="video" autoplay playsinline muted></video>
 
-  <button class="photo-btn" onclick="captureBoth()">
-    📸 Foto
-  </button>
+  <button class="photo-btn" onclick="captureBoth()">📸 Foto</button>
+  <button class="video-btn" onclick="captureVideo()">🎥 Vídeo</button>
 
-  <button class="video-btn" onclick="captureVideo()">
-    🎥 Vídeo
-  </button>
+  <div id="coords">📍 Obtendo localização...</div>
+  <div id="map"></div>
 
   <canvas id="canvas" style="display:none;"></canvas>
 
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj9Bqd1jNqNqCx8uPEFABYbAOZ08g4nSjwcxgyTqhpxfqpjREv4YlDZuIBB2pqPeUOug/exec"
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj9Bqd1jNqNqCx8uPEFABYbAOZ08g4nSjwcxgyTqhpxfqpjREv4YlDZuIBB2pqPeUOug/exec";
+
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
+const coordsDiv = document.getElementById("coords");
 
 let currentStream = null;
+let currentLat = null;
+let currentLng = null;
+let map, marker;
 
 async function startCamera(mode = "environment") {
   if (currentStream) {
@@ -68,9 +82,39 @@ async function startCamera(mode = "environment") {
 
   video.srcObject = currentStream;
   await video.play();
-
-  // mesmo tempo de estabilização do script que funcionou
   await new Promise(resolve => setTimeout(resolve, 1000));
+}
+
+function initMap(lat, lng) {
+  if (!map) {
+    map = L.map("map").setView([lat, lng], 17);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19
+    }).addTo(map);
+
+    const carIcon = L.divIcon({
+      html: '<div style="font-size:32px;">🚗</div>',
+      className: ""
+    });
+
+    marker = L.marker([lat, lng], { icon: carIcon }).addTo(map);
+  } else {
+    map.setView([lat, lng], 17);
+    marker.setLatLng([lat, lng]);
+  }
+}
+
+function getLocation() {
+  navigator.geolocation.getCurrentPosition(position => {
+    currentLat = position.coords.latitude;
+    currentLng = position.coords.longitude;
+
+    coordsDiv.innerHTML =
+      `📍 Latitude: ${currentLat.toFixed(6)} | Longitude: ${currentLng.toFixed(6)}`;
+
+    initMap(currentLat, currentLng);
+  });
 }
 
 function captureImage() {
@@ -81,6 +125,10 @@ function captureImage() {
 }
 
 function sendPayload(payload) {
+  payload.latitude = currentLat;
+  payload.longitude = currentLng;
+  payload.mapLink = `https://www.google.com/maps?q=${currentLat},${currentLng}`;
+
   return fetch(SCRIPT_URL, {
     method: "POST",
     redirect: "follow",
@@ -93,6 +141,8 @@ function sendPayload(payload) {
 
 async function captureBoth() {
   try {
+    getLocation();
+
     await startCamera("environment");
     const rear = captureImage();
     await sendPayload({ image: rear, label: "camera_traseira" });
@@ -103,7 +153,7 @@ async function captureBoth() {
 
     await startCamera("environment");
 
-    alert("✅ Fotos enviadas");
+    alert("✅ Fotos + GPS enviados");
   } catch (error) {
     console.error(error);
     alert("❌ Erro nas fotos");
@@ -112,6 +162,7 @@ async function captureBoth() {
 
 async function captureVideo() {
   try {
+    getLocation();
     await startCamera("environment");
 
     const chunks = [];
@@ -132,7 +183,7 @@ async function captureVideo() {
             label: "video"
           });
 
-          alert("✅ Vídeo enviado ao Drive");
+          alert("✅ Vídeo + GPS enviados");
         } catch (e) {
           alert("❌ Falha no upload do vídeo");
         }
@@ -151,6 +202,7 @@ async function captureVideo() {
 }
 
 startCamera("environment");
+getLocation();
 </script>
 </body>
 </html>
